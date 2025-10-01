@@ -508,6 +508,15 @@ void rgw::keystone::TokenEnvelope::User::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("domain", domain, obj);
 }
 
+void rgw::keystone::TokenEnvelope::ApplicationCredential::decode_json(JSONObj *obj)
+{
+  // Parse application credential fields from Keystone token JSON
+  // All fields are optional and will remain empty/default if not present
+  JSONDecoder::decode_json("id", id, obj, false);
+  JSONDecoder::decode_json("name", name, obj, false);
+  JSONDecoder::decode_json("restricted", restricted, obj, false);
+}
+
 void rgw::keystone::TokenEnvelope::decode(JSONObj* const root_obj)
 {
   std::string expires_iso8601;
@@ -516,6 +525,10 @@ void rgw::keystone::TokenEnvelope::decode(JSONObj* const root_obj)
   JSONDecoder::decode_json("expires_at", expires_iso8601, root_obj, true);
   JSONDecoder::decode_json("roles", roles, root_obj, true);
   JSONDecoder::decode_json("project", project, root_obj, true);
+
+  // Parse application credential if present (optional field for app credential auth)
+  // This field is only present when user authenticates with application credentials
+  JSONDecoder::decode_json("application_credential", application_credential, root_obj, false);
 
   struct tm t;
   if (parse_iso8601(expires_iso8601.c_str(), &t)) {

@@ -225,13 +225,15 @@ class DefaultStrategy : public rgw::auth::Strategy,
   aplptr_t create_apl_remote(CephContext* const cct,
                              const req_state* const s,
                              acl_strategy_t&& extra_acl_strategy,
-                             const rgw::auth::RemoteApplier::AuthInfo &info) const override {
+                             const rgw::auth::RemoteApplier::AuthInfo &info,
+                             std::shared_ptr<rgw::keystone::TokenEnvelope> token_envelope = nullptr) const override {
     auto apl = \
       rgw::auth::add_3rdparty(driver, rgw_user(s->account_name),
         rgw::auth::add_sysreq(cct, driver, s,
           rgw::auth::RemoteApplier(cct, driver, std::move(extra_acl_strategy), info,
                                    implicit_tenant_context,
-                                   rgw::auth::ImplicitTenants::IMPLICIT_TENANTS_SWIFT)));
+                                   rgw::auth::ImplicitTenants::IMPLICIT_TENANTS_SWIFT,
+                                   token_envelope)));
     /* TODO(rzarzynski): replace with static_ptr. */
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }

@@ -76,6 +76,42 @@ struct rgw_log_entry {
   using headers_map = boost::container::flat_map<std::string, std::string>;
   using Clock = req_state::Clock;
 
+  struct KeystoneRole {
+    std::string name;
+    std::string domain_id;
+    std::string domain_name;
+    
+    // Default constructor
+    KeystoneRole() = default;
+    
+    // Constructor with parameters for convenient initialization
+    KeystoneRole(const std::string& role_name, 
+                 const std::string& role_domain_id = "",
+                 const std::string& role_domain_name = "")
+      : name(role_name), domain_id(role_domain_id), domain_name(role_domain_name) {}
+    
+    void encode(bufferlist& bl) const {
+      ENCODE_START(1, 1, bl);
+      encode(name, bl);
+      encode(domain_id, bl);
+      encode(domain_name, bl);
+      ENCODE_FINISH(bl);
+    }
+    
+    void decode(bufferlist::const_iterator& p) {
+      DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, p);
+      decode(name, p);
+      decode(domain_id, p);
+      decode(domain_name, p);
+      DECODE_FINISH(p);
+    }
+    
+    // Utility method to check if role is valid
+    bool is_valid() const {
+      return !name.empty();
+    }
+  };
+
   rgw_owner object_owner;
   rgw_owner bucket_owner;
   std::string bucket;
@@ -105,8 +141,29 @@ struct rgw_log_entry {
   rgw_account_id account_id;
   std::string role_id;
 
+  // Keystone identity fields (version 16) - grouped for efficient memory layout
+  // Project information
+  std::string keystone_project_id;
+  std::string keystone_project_name;
+  std::string keystone_project_domain_id;
+  std::string keystone_project_domain_name;
+  
+  // User information  
+  std::string keystone_user_id;
+  std::string keystone_user_name;
+  std::string keystone_user_domain_id;
+  std::string keystone_user_domain_name;
+  
+  // Application credential information
+  std::string keystone_app_credential_id;
+  std::string keystone_app_credential_name;
+  bool keystone_app_credential_restricted = false;
+  
+  // Roles (vector placed at end to minimize padding)
+  std::vector<KeystoneRole> keystone_roles;
+
   void encode(bufferlist &bl) const {
-    ENCODE_START(15, 5, bl);
+    ENCODE_START(16, 5, bl);
     // old object/bucket owner ids, encoded in full in v8
     std::string empty_owner_id;
     encode(empty_owner_id, bl);
@@ -142,10 +199,25 @@ struct rgw_log_entry {
     encode(delete_multi_obj_meta, bl);
     encode(account_id, bl);
     encode(role_id, bl);
+    
+    // Version 16 fields - Keystone identity data (maintain wire format order)
+    encode(keystone_project_id, bl);
+    encode(keystone_project_name, bl);
+    encode(keystone_project_domain_id, bl);
+    encode(keystone_project_domain_name, bl);
+    encode(keystone_user_id, bl);
+    encode(keystone_user_name, bl);
+    encode(keystone_user_domain_id, bl);
+    encode(keystone_user_domain_name, bl);
+    encode(keystone_roles, bl);
+    encode(keystone_app_credential_id, bl);
+    encode(keystone_app_credential_name, bl);
+    encode(keystone_app_credential_restricted, bl);
+    
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator &p) {
-    DECODE_START_LEGACY_COMPAT_LEN(15, 5, 5, p);
+    DECODE_START_LEGACY_COMPAT_LEN(16, 5, 5, p);
     std::string object_owner_id;
     std::string bucket_owner_id;
     decode(object_owner_id, p);
@@ -218,11 +290,48 @@ struct rgw_log_entry {
       decode(account_id, p);
       decode(role_id, p);
     }
+    if (struct_v >= 16) {
+      decode(keystone_project_id, p);
+      decode(keystone_project_name, p);
+      decode(keystone_project_domain_id, p);
+      decode(keystone_project_domain_name, p);
+      decode(keystone_user_id, p);
+      decode(keystone_user_name, p);
+      decode(keystone_user_domain_id, p);
+      decode(keystone_user_domain_name, p);
+      decode(keystone_roles, p);
+      decode(keystone_app_credential_id, p);
+      decode(keystone_app_credential_name, p);
+      decode(keystone_app_credential_restricted, p);
+    }
     DECODE_FINISH(p);
   }
   void dump(ceph::Formatter *f) const;
   static std::list<rgw_log_entry> generate_test_instances();
+  
+  // Utility methods for Keystone field management
+  bool has_keystone_data() const {
+    return !keystone_project_id.empty() || !keystone_user_id.empty() ||
+           !keystone_roles.empty() || !keystone_app_credential_id.empty() ||
+           !keystone_app_credential_name.empty();
+  }
+  
+  void clear_keystone_data() {
+    keystone_project_id.clear();
+    keystone_project_name.clear();
+    keystone_project_domain_id.clear();
+    keystone_project_domain_name.clear();
+    keystone_user_id.clear();
+    keystone_user_name.clear();
+    keystone_user_domain_id.clear();
+    keystone_user_domain_name.clear();
+    keystone_app_credential_id.clear();
+    keystone_app_credential_name.clear();
+    keystone_app_credential_restricted = false;
+    keystone_roles.clear();
+  }
 };
+WRITE_CLASS_ENCODER(rgw_log_entry::KeystoneRole)
 WRITE_CLASS_ENCODER(rgw_log_entry)
 
 class OpsLogSink {

@@ -6923,7 +6923,7 @@ rgw::auth::s3::LDAPEngine::authenticate(
   }
 
   auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(),
-                                            get_creds_info(base64_token));
+                                            get_creds_info(base64_token), nullptr);
   return result_t::grant(std::move(apl), completer_factory(boost::none));
 } /* rgw::auth::s3::LDAPEngine::authenticate */
 
@@ -7247,7 +7247,7 @@ rgw::auth::s3::STSEngine::authenticate(
 
   if (token.acct_type == TYPE_KEYSTONE || token.acct_type == TYPE_LDAP) {
     auto apl = remote_apl_factory->create_apl_remote(cct, s, get_acl_strategy(),
-                                            get_creds_info(token));
+                                            get_creds_info(token), nullptr);
     return result_t::grant(std::move(apl), completer_factory(token.secret_access_key));
   } else if (token.acct_type == TYPE_ROLE) {
     t_attrs.user_id = std::move(token.user); // This is mostly needed to assign the owner of a bucket during its creation
@@ -7291,6 +7291,11 @@ rgw::auth::s3::STSEngine::authenticate(
 bool rgw::auth::s3::S3AnonymousEngine::is_applicable(
   const req_state* s
 ) const noexcept {
+  /* If Keystone authentication headers are present, anonymous auth is not applicable */
+  if (s->info.env->exists("HTTP_X_AUTH_TOKEN") || s->info.env->exists("HTTP_X_SUBJECT_TOKEN")) {
+    return false;
+  }
+
   AwsVersion version;
   AwsRoute route;
   std::tie(version, route) = discover_aws_flavour(s->info);

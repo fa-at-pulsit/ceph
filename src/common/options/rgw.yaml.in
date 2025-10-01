@@ -1746,6 +1746,22 @@ options:
   - rgw_enable_ops_log
   - rgw_ops_log_socket_path
   with_legacy: true
+# Include Keystone identity context in ops logs
+- name: rgw_ops_log_keystone_scope
+  type: bool
+  level: advanced
+  desc: Include Keystone identity context in ops logs
+  long_desc: When enabled, adds comprehensive Keystone user, project, domain,
+    and role information to ops log entries for requests authenticated via
+    Keystone. This provides detailed audit trail capability for compliance
+    and security analysis.
+  default: false
+  services:
+  - rgw
+  see_also:
+  - rgw_enable_ops_log
+  - rgw_keystone_url
+  with_legacy: true
 - name: rgw_usage_log_flush_threshold
   type: int
   level: advanced

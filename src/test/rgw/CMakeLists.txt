@@ -419,3 +419,13 @@ add_catch2_test_rgw(rgw_hex)
 add_executable(unittest_rgw_async_utils test_rgw_async_utils.cc)
 add_ceph_unittest(unittest_rgw_async_utils)
 target_link_libraries(unittest_rgw_async_utils ${rgw_libs} ${UNITTEST_LIBS})
+
+# unittest_rgw_log - tests for rgw_log_entry structure
+add_executable(unittest_rgw_log test_rgw_log.cc)
+add_ceph_unittest(unittest_rgw_log)
+target_link_libraries(unittest_rgw_log ${rgw_libs} ${UNITTEST_LIBS})
+
+# unittest_rgw_keystone_log - tests for Keystone data extraction utility
+add_executable(unittest_rgw_keystone_log test_rgw_keystone_log.cc)
+add_ceph_unittest(unittest_rgw_keystone_log)
+target_link_libraries(unittest_rgw_keystone_log ${rgw_libs} ${UNITTEST_LIBS})

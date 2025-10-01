@@ -66,6 +66,10 @@ namespace rgw::lua {
   class Background;
 }
 
+namespace rgw::keystone {
+  class TokenEnvelope;
+}
+
 struct RGWProcessEnv;
 
 using ceph::crypto::MD5;
@@ -1424,6 +1428,9 @@ struct req_state : DoutPrefixProvider {
 
   //token claims from STS token for ops log (can be used for Keystone token also)
   std::vector<std::string> token_claims;
+
+  // Keystone context for ops logging (only when rgw_ops_log_keystone_scope is enabled)
+  std::shared_ptr<rgw::keystone::TokenEnvelope> keystone_token_envelope;
 
   std::vector<rgw::IAM::Policy> session_policies;
 

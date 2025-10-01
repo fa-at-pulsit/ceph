@@ -277,8 +277,9 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
   if (t) {
     ldpp_dout(dpp, 20) << "cached token.project.id=" << t->get_project_id()
                    << dendl;
+    auto envelope_ptr = t ? std::make_shared<rgw::keystone::TokenEnvelope>(*t) : nullptr;
     auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(*t),
-                                              get_creds_info(*t));
+                                              get_creds_info(*t), envelope_ptr);
     return result_t::grant(std::move(apl));
   }
 
@@ -352,6 +353,13 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
   if (! t) {
     return result_t::deny(-EACCES);
   }
+
+  // Store token envelope in req_state for ops logging (fallback path)
+  if (g_conf()->rgw_ops_log_keystone_scope && t) {
+    req_state* mutable_s = const_cast<req_state*>(s);
+    mutable_s->keystone_token_envelope = std::make_shared<rgw::keystone::TokenEnvelope>(*t);
+  }
+
   t->update_roles(roles.admin, roles.reader);
 
   /* Verify expiration. */
@@ -388,8 +396,9 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
                     << ":" << t->get_user_name()
                     << " expires: " << t->get_expires() << dendl;
       token_cache.add(token_id, *t);
+      auto envelope_ptr = t ? std::make_shared<rgw::keystone::TokenEnvelope>(*t) : nullptr;
       auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(*t),
-                                                get_creds_info(*t));
+                                                get_creds_info(*t), envelope_ptr);
       return result_t::grant(std::move(apl));
     }
   }
@@ -746,8 +755,9 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(
                   << ":" << t->get_user_name()
                   << " expires: " << t->get_expires() << dendl;
 
+    auto envelope_ptr = t ? std::make_shared<rgw::keystone::TokenEnvelope>(*t) : nullptr;
     auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(*t),
-                                              get_creds_info(*t, accepted_roles.admin, std::string(access_key_id)));
+                                              get_creds_info(*t, accepted_roles.admin, std::string(access_key_id)), envelope_ptr);
     return result_t::grant(std::move(apl), completer_factory(secret_key));
   }
 }

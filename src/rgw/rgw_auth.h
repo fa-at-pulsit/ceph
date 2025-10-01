@@ -22,6 +22,13 @@ class RGWCtl;
 struct rgw_log_entry;
 struct req_state;
 
+// Forward declaration for TokenEnvelope
+namespace rgw {
+namespace keystone {
+  class TokenEnvelope;
+}
+}
+
 namespace rgw {
 namespace auth {
 
@@ -653,6 +660,10 @@ protected:
   mutable std::optional<RGWAccountInfo> account;
   mutable std::vector<IAM::Policy> policies;
 
+  // TokenEnvelope storage for Keystone ops logging
+  // Copy constructor has been fixed to handle deep copying properly
+  std::shared_ptr<rgw::keystone::TokenEnvelope> token_envelope;
+
   virtual void create_account(const DoutPrefixProvider* dpp,
                               const rgw_user& acct_user,
                               bool implicit_tenant,
@@ -664,13 +675,15 @@ public:
                 acl_strategy_t&& extra_acl_strategy,
                 const AuthInfo& info,
 		const rgw::auth::ImplicitTenants& implicit_tenant_context,
-                rgw::auth::ImplicitTenants::implicit_tenant_flag_bits implicit_tenant_bit)
+                rgw::auth::ImplicitTenants::implicit_tenant_flag_bits implicit_tenant_bit,
+                std::shared_ptr<rgw::keystone::TokenEnvelope> token_env = nullptr)
     : cct(cct),
       driver(driver),
       extra_acl_strategy(std::move(extra_acl_strategy)),
       info(info),
       implicit_tenant_context(implicit_tenant_context),
-      implicit_tenant_bit(implicit_tenant_bit) {
+      implicit_tenant_bit(implicit_tenant_bit),
+      token_envelope(token_env) {
   }
 
   ACLOwner get_aclowner() const override;
@@ -698,6 +711,10 @@ public:
     return account;
   }
 
+  // TokenEnvelope accessor methods for Keystone ops logging
+  bool has_token_envelope() const { return token_envelope != nullptr; }
+  std::shared_ptr<rgw::keystone::TokenEnvelope> get_token_envelope() const { return token_envelope; }
+
   struct Factory {
     virtual ~Factory() {}
     /* Providing r-value reference here is required intensionally. Callee is
@@ -706,7 +723,8 @@ public:
     virtual aplptr_t create_apl_remote(CephContext* cct,
                                        const req_state* s,
                                        acl_strategy_t&& extra_acl_strategy,
-                                       const AuthInfo &info) const = 0;
+                                       const AuthInfo &info,
+                                       std::shared_ptr<rgw::keystone::TokenEnvelope> token_envelope = nullptr) const = 0;
   };
 };
 

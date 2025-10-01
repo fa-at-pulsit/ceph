@@ -15,6 +15,7 @@
 #include "rgw_keystone.h"
 #include "rgw_sal.h"
 #include "rgw_log.h"
+#include "rgw_auth_keystone_utils.h"
 
 #include "include/function2.hpp"
 #include "include/str_list.h"
@@ -533,6 +534,14 @@ rgw::auth::Strategy::apply(const DoutPrefixProvider *dpp, const rgw::auth::Strat
       rgw::auth::IdentityApplier::aplptr_t applier = result.get_applier();
       rgw::auth::Completer::cmplptr_t completer = result.get_completer();
 
+      // Store TokenEnvelope in req_state for ops logging when Keystone scope logging is enabled
+      if (g_conf()->rgw_ops_log_keystone_scope) {
+        auto* remote_applier = dynamic_cast<const rgw::auth::RemoteApplier*>(applier.get());
+        if (remote_applier && remote_applier->has_token_envelope()) {
+          s->keystone_token_envelope = remote_applier->get_token_envelope();
+        }
+      }
+
       /* Account used by a given RGWOp is decoupled from identity employed
        * in the authorization phase (RGWOp::verify_permissions). */
       s->user = applier->load_acct_info(dpp);
@@ -955,12 +964,57 @@ void rgw::auth::RemoteApplier::create_account(const DoutPrefixProvider* dpp,
 
 void rgw::auth::RemoteApplier::write_ops_log_entry(rgw_log_entry& entry) const
 {
+  // Populate core fields
   entry.access_key_id = info.access_key_id;
   entry.subuser = info.subuser;
   if (account) {
     entry.account_id = account->id;
   }
   entry.user = info.keystone_user;
+  
+  try {
+    // Check configuration - the option is defined in rgw.yaml.in
+    bool keystone_scope_enabled = g_conf()->rgw_ops_log_keystone_scope;
+    
+    if (keystone_scope_enabled) {
+      // Extract Keystone data if TokenEnvelope is available
+      if (token_envelope) {
+        try {
+          const auto& envelope = *token_envelope;
+          rgw::auth::keystone::KeystoneDataExtractor::extract_keystone_data(
+            envelope,
+            entry,
+            true  // include_keystone_scope is true since configuration is enabled
+          );
+        } catch (const std::exception& e) {
+          // Continue without Keystone data on exception
+        } catch (...) {
+          // Catch all exceptions
+        }
+      }
+      // TokenEnvelope is null for non-Keystone auth (S3, LDAP, etc.)
+    }
+    
+  } catch (const std::bad_alloc& e) {
+    // Clear Keystone fields on memory allocation failure
+    entry.keystone_project_id.clear();
+    entry.keystone_project_name.clear();
+    entry.keystone_user_id.clear();
+    entry.keystone_user_name.clear();
+    entry.keystone_roles.clear();
+    entry.keystone_app_credential_id.clear();
+
+  } catch (const std::exception& e) {
+    // Clear Keystone fields on any exception
+    entry.keystone_project_id.clear();
+    entry.keystone_project_name.clear();
+    entry.keystone_user_id.clear();
+    entry.keystone_user_name.clear();
+    entry.keystone_roles.clear();
+    entry.keystone_app_credential_id.clear();
+  }
+  
+  // This ensures that primary storage operations are never impacted by Keystone logging issues
 }
 
 /* TODO(rzarzynski): we need to handle display_name changes. */

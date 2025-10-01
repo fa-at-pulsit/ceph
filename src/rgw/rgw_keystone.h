@@ -176,16 +176,70 @@ public:
     void decode_json(JSONObj *obj);
   };
 
+  class ApplicationCredential {
+  public:
+    std::string id;
+    std::string name;
+    bool restricted;
+
+    ApplicationCredential() : restricted(false) {}
+
+    // Copy constructor for safe deep copying
+    ApplicationCredential(const ApplicationCredential& other)
+      : id(other.id), name(other.name), restricted(other.restricted) {}
+
+    // Assignment operator
+    ApplicationCredential& operator=(const ApplicationCredential& other) {
+      if (this != &other) {
+        id = other.id;
+        name = other.name;
+        restricted = other.restricted;
+      }
+      return *this;
+    }
+
+    void decode_json(JSONObj *obj);
+  };
+
   Token token;
   Project project;
   User user;
   std::list<Role> roles;
+  ApplicationCredential application_credential;
 
   void decode(JSONObj* obj);
 
 public:
   /* We really need the default ctor because of the internals of TokenCache. */
   TokenEnvelope() = default;
+  
+  /* Explicit copy constructor to ensure deep copy of all string members */
+  TokenEnvelope(const TokenEnvelope& other)
+    : token(other.token),
+      project(other.project),
+      user(other.user),
+      roles(other.roles),
+      application_credential(other.application_credential) {
+    // Explicitly constructed to ensure proper deep copy
+  }
+  
+  /* Explicit assignment operator */
+  TokenEnvelope& operator=(const TokenEnvelope& other) {
+    if (this != &other) {
+      token = other.token;
+      project = other.project;
+      user = other.user;
+      roles = other.roles;
+      application_credential = other.application_credential;
+    }
+    return *this;
+  }
+  
+  /* Move constructor for efficiency */
+  TokenEnvelope(TokenEnvelope&& other) noexcept = default;
+  
+  /* Move assignment operator */
+  TokenEnvelope& operator=(TokenEnvelope&& other) noexcept = default;
 
   void set_expires(time_t expires) { token.expires = expires; }
   time_t get_expires() const { return token.expires; }

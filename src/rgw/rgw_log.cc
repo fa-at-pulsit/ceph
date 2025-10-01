@@ -14,6 +14,7 @@
 #include "rgw_rest.h"
 #include "rgw_zone.h"
 #include "rgw_rados.h"
+#include "rgw_auth_keystone_utils.h"
 
 #include "services/svc_zone.h"
 
@@ -23,6 +24,73 @@
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;
+
+// Helper function to dump Keystone scope JSON with consistent formatting
+static void dump_keystone_scope(ceph::Formatter *formatter, const rgw_log_entry& entry) {
+  formatter->open_object_section("keystone_scope");
+  
+  // Helper lambda for dumping string or null
+  auto dump_string_or_null = [formatter](const std::string& name, const std::string& value) {
+    if (!value.empty()) {
+      formatter->dump_string(name, value);
+    } else {
+      formatter->dump_null(name);
+    }
+  };
+  
+  // Helper lambda for dumping domain object
+  auto dump_domain = [&](const std::string& domain_id, const std::string& domain_name) {
+    formatter->open_object_section("domain");
+    dump_string_or_null("id", domain_id);
+    dump_string_or_null("name", domain_name);
+    formatter->close_section(); // domain
+  };
+  
+  // Project information with nested domain
+  formatter->open_object_section("project");
+  dump_string_or_null("id", entry.keystone_project_id);
+  dump_string_or_null("name", entry.keystone_project_name);
+  dump_domain(entry.keystone_project_domain_id, entry.keystone_project_domain_name);
+  formatter->close_section(); // project
+  
+  // User information with nested domain
+  formatter->open_object_section("user");
+  dump_string_or_null("id", entry.keystone_user_id);
+  dump_string_or_null("name", entry.keystone_user_name);
+  dump_domain(entry.keystone_user_domain_id, entry.keystone_user_domain_name);
+  formatter->close_section(); // user
+  
+  // Roles array
+  formatter->open_array_section("roles");
+  for (const auto& role : entry.keystone_roles) {
+    formatter->open_object_section("");
+    formatter->dump_string("name", role.name);
+    // Only add domain if at least one domain field is present
+    if (!role.domain_id.empty() || !role.domain_name.empty()) {
+      dump_domain(role.domain_id, role.domain_name);
+    }
+    formatter->close_section(); // role
+  }
+  formatter->close_section(); // roles
+  
+  // Application credential (only if present)
+  if (!entry.keystone_app_credential_id.empty()) {
+    formatter->open_object_section("application_credential");
+    formatter->dump_string("id", entry.keystone_app_credential_id);
+
+    // Include name if not empty (backward compatibility)
+    if (!entry.keystone_app_credential_name.empty()) {
+      formatter->dump_string("name", entry.keystone_app_credential_name);
+    }
+
+    // Always include restricted flag when application credential is present
+    formatter->dump_bool("restricted", entry.keystone_app_credential_restricted);
+
+    formatter->close_section(); // application_credential
+  }
+  
+  formatter->close_section(); // keystone_scope
+}
 
 static void set_param_str(req_state *s, const char *name, string& str)
 {
@@ -353,6 +421,12 @@ void rgw_format_ops_log_entry(struct rgw_log_entry& entry, Formatter *formatter)
     formatter->close_section();
     formatter->close_section();
   }
+
+  // Add Keystone scope JSON object when Keystone data is present
+  if (entry.has_keystone_data()) {
+    dump_keystone_scope(formatter, entry);
+  }
+
   formatter->close_section();
 }
 
@@ -634,6 +708,17 @@ int rgw_log_op(RGWREST* const rest, req_state *s, const RGWOp* op, OpsLogSink *o
     s->auth.identity->write_ops_log_entry(entry);
   } else {
     entry.identity_type = TYPE_NONE;
+
+    // Check for stored Keystone data when identity is null but Keystone auth succeeded
+    if (g_conf()->rgw_ops_log_keystone_scope && s->keystone_token_envelope) {
+      try {
+        const auto& envelope = *s->keystone_token_envelope;
+        rgw::auth::keystone::KeystoneDataExtractor::extract_keystone_data(
+          envelope, entry, true);
+      } catch (...) {
+        // Continue without Keystone data on exception
+      }
+    }
   }
 
   if (! s->token_claims.empty()) {
@@ -702,10 +787,26 @@ list<rgw_log_entry> rgw_log_entry::generate_test_instances()
   e.identity_type = TYPE_RGW;
   e.account_id = "account_id";
   e.role_id = "role_id";
+  
+  // Add test Keystone fields (version 16)
+  e.keystone_project_id = "test_project_id";
+  e.keystone_project_name = "test-project";
+  e.keystone_project_domain_id = "test_domain_id";
+  e.keystone_project_domain_name = "test-domain";
+  e.keystone_user_id = "test_user_id";
+  e.keystone_user_name = "test-user";
+  e.keystone_user_domain_id = "test_user_domain_id";
+  e.keystone_user_domain_name = "test-user-domain";
+  e.keystone_app_credential_id = "test_app_cred_id";
+  
+  // Add test role using new constructor
+  e.keystone_roles.emplace_back("test-role", "test-role-domain-id", "test-role-domain");
+  
   o.push_back(std::move(e));
   o.push_back(rgw_log_entry{});
   return o;
 }
+
 
 void rgw_log_entry::dump(Formatter *f) const
 {
@@ -734,5 +835,10 @@ void rgw_log_entry::dump(Formatter *f) const
   }
   if (!role_id.empty()) {
     f->dump_string("role_id", role_id);
+  }
+
+  // Add Keystone scope JSON object when Keystone data is present
+  if (has_keystone_data()) {
+    dump_keystone_scope(f, *this);
   }
 }

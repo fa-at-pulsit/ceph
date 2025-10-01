@@ -45,11 +45,13 @@ class STSAuthStrategy : public rgw::auth::Strategy,
   aplptr_t create_apl_remote(CephContext* const cct,
                              const req_state* const s,
                              rgw::auth::RemoteApplier::acl_strategy_t&& acl_alg,
-                             const rgw::auth::RemoteApplier::AuthInfo &info) const override {
+                             const rgw::auth::RemoteApplier::AuthInfo &info,
+                             std::shared_ptr<rgw::keystone::TokenEnvelope> token_envelope = nullptr) const override {
     auto apl = rgw::auth::add_sysreq(cct, driver, s,
       rgw::auth::RemoteApplier(cct, driver, std::move(acl_alg), info,
 			       implicit_tenant_context,
-                               rgw::auth::ImplicitTenants::IMPLICIT_TENANTS_S3));
+                               rgw::auth::ImplicitTenants::IMPLICIT_TENANTS_S3,
+                               token_envelope));
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
 
@@ -116,11 +118,13 @@ class ExternalAuthStrategy : public rgw::auth::Strategy,
   aplptr_t create_apl_remote(CephContext* const cct,
                              const req_state* const s,
                              rgw::auth::RemoteApplier::acl_strategy_t&& acl_alg,
-                             const rgw::auth::RemoteApplier::AuthInfo &info) const override {
+                             const rgw::auth::RemoteApplier::AuthInfo &info,
+                             std::shared_ptr<rgw::keystone::TokenEnvelope> token_envelope = nullptr) const override {
     auto apl = rgw::auth::add_sysreq(cct, driver, s,
       rgw::auth::RemoteApplier(cct, driver, std::move(acl_alg),
                                info, implicit_tenant_context,
-                               rgw::auth::ImplicitTenants::IMPLICIT_TENANTS_S3));
+                               rgw::auth::ImplicitTenants::IMPLICIT_TENANTS_S3,
+                               token_envelope));
     /* TODO(rzarzynski): replace with static_ptr. */
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
@@ -240,11 +244,6 @@ public:
       sts_engine(cct, driver, implicit_tenant_context, &ver_abstractor),
       local_engine(cct, driver, ver_abstractor,
                    static_cast<rgw::auth::LocalApplier::Factory*>(this)) {
-    /* The anonymous auth. */
-    if (AllowAnonAccessT) {
-      add_engine(Control::SUFFICIENT, anonymous_engine);
-    }
-
     auto auth_order = parse_auth_order(cct);
     engine_map_t engine_map;
 
@@ -263,6 +262,11 @@ public:
     }
 
     add_engines(auth_order, engine_map);
+
+    /* The anonymous auth - add LAST as fallback. */
+    if (AllowAnonAccessT) {
+      add_engine(Control::FALLBACK, anonymous_engine);
+    }
   }
 
   const char* get_name() const noexcept override {
