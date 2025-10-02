@@ -184,7 +184,6 @@ public:
 
     ApplicationCredential() : restricted(false) {}
 
-    // Copy constructor for safe deep copying
     ApplicationCredential(const ApplicationCredential& other)
       : id(other.id), name(other.name), restricted(other.restricted) {}
 
@@ -212,18 +211,15 @@ public:
 public:
   /* We really need the default ctor because of the internals of TokenCache. */
   TokenEnvelope() = default;
-  
-  /* Explicit copy constructor to ensure deep copy of all string members */
+
   TokenEnvelope(const TokenEnvelope& other)
     : token(other.token),
       project(other.project),
       user(other.user),
       roles(other.roles),
       application_credential(other.application_credential) {
-    // Explicitly constructed to ensure proper deep copy
   }
-  
-  /* Explicit assignment operator */
+
   TokenEnvelope& operator=(const TokenEnvelope& other) {
     if (this != &other) {
       token = other.token;
@@ -234,11 +230,8 @@ public:
     }
     return *this;
   }
-  
-  /* Move constructor for efficiency */
+
   TokenEnvelope(TokenEnvelope&& other) noexcept = default;
-  
-  /* Move assignment operator */
   TokenEnvelope& operator=(TokenEnvelope&& other) noexcept = default;
 
   void set_expires(time_t expires) { token.expires = expires; }

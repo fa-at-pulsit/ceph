@@ -263,7 +263,11 @@ public:
 
     add_engines(auth_order, engine_map);
 
-    /* The anonymous auth - add LAST as fallback. */
+    /* Anonymous auth as last resort.
+     * Moved to FALLBACK position (was FIRST+SUFFICIENT historically) to ensure
+     * Keystone/external engines execute first for ops logging. This is safe because
+     * S3AnonymousEngine::is_applicable() checks for Keystone headers and self-skips
+     * when present, making both orderings functionally equivalent. */
     if (AllowAnonAccessT) {
       add_engine(Control::FALLBACK, anonymous_engine);
     }

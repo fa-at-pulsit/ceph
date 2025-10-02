@@ -80,16 +80,14 @@ struct rgw_log_entry {
     std::string name;
     std::string domain_id;
     std::string domain_name;
-    
-    // Default constructor
+
     KeystoneRole() = default;
-    
-    // Constructor with parameters for convenient initialization
-    KeystoneRole(const std::string& role_name, 
+
+    KeystoneRole(const std::string& role_name,
                  const std::string& role_domain_id = "",
                  const std::string& role_domain_name = "")
       : name(role_name), domain_id(role_domain_id), domain_name(role_domain_name) {}
-    
+
     void encode(bufferlist& bl) const {
       ENCODE_START(1, 1, bl);
       encode(name, bl);
@@ -97,7 +95,7 @@ struct rgw_log_entry {
       encode(domain_name, bl);
       ENCODE_FINISH(bl);
     }
-    
+
     void decode(bufferlist::const_iterator& p) {
       DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, p);
       decode(name, p);
@@ -105,8 +103,7 @@ struct rgw_log_entry {
       decode(domain_name, p);
       DECODE_FINISH(p);
     }
-    
-    // Utility method to check if role is valid
+
     bool is_valid() const {
       return !name.empty();
     }
@@ -141,8 +138,14 @@ struct rgw_log_entry {
   rgw_account_id account_id;
   std::string role_id;
 
-  // Keystone identity fields (version 16) - grouped for efficient memory layout
-  // Project information
+  /* Keystone identity fields (version 16)
+   * Version bump required to add complete Keystone authentication context for ops logs.
+   * Alternatives considered:
+   * - Encode as JSON string in existing field: loses structure, harder to parse
+   * - Separate log file: harder to correlate, breaks existing log analysis tools
+   * - External metadata service: additional infrastructure, latency, complexity
+   * Chosen: Structured fields in rgw_log_entry provides integration with existing
+   * ops log infrastructure while maintaining backward-compatible decode. */
   std::string keystone_project_id;
   std::string keystone_project_name;
   std::string keystone_project_domain_id;

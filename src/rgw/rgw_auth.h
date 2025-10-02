@@ -660,8 +660,10 @@ protected:
   mutable std::optional<RGWAccountInfo> account;
   mutable std::vector<IAM::Policy> policies;
 
-  // TokenEnvelope storage for Keystone ops logging
-  // Copy constructor has been fixed to handle deep copying properly
+  /* Keystone token data for ops logging.
+   * Stored as shared_ptr to avoid deep copies during authentication pipeline.
+   * Dual storage strategy: primary in RemoteApplier, fallback in req_state
+   * for edge cases where identity is NULL during ops logging. */
   std::shared_ptr<rgw::keystone::TokenEnvelope> token_envelope;
 
   virtual void create_account(const DoutPrefixProvider* dpp,
@@ -711,7 +713,6 @@ public:
     return account;
   }
 
-  // TokenEnvelope accessor methods for Keystone ops logging
   bool has_token_envelope() const { return token_envelope != nullptr; }
   std::shared_ptr<rgw::keystone::TokenEnvelope> get_token_envelope() const { return token_envelope; }
 
