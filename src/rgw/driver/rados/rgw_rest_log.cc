@@ -557,7 +557,7 @@ void RGWOp_BILog_Info::execute(optional_yield y) {
 
   map<RGWObjCategory, RGWStorageStats> stats;
   std::optional<std::map<std::string, RGWStorageStats>> sc_stats{
-    std::map<std::string, RGWStorageClassStats>{}
+    std::map<std::string, RGWStorageStats>{}
   };
   const auto& index = log_to_index_layout(logs.back());
 
